@@ -13,10 +13,10 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-f', dest='trace_file', metavar='filename', type=str
 				   , required=True, help='filename of the trace file')
 parser.add_argument('-s', dest='cache_size', metavar='cache size',type=int
-				   , choices=range(1,8193), required=True
+				   , required=True
 				   , help='Size of cache in kb. Range is 1 to 8192')
 parser.add_argument('-b', dest='block_size', metavar='block size',type=int
-				   , choices=range(4,65), required=True
+				   , required=True
 				   , help='Size of blocks in kb. Range is 4 to 64')
 parser.add_argument('-a', dest='associativity', metavar='associativity'
 				   ,type=int, choices=[1,2,4,8,16], required=True
@@ -27,14 +27,19 @@ parser.add_argument('-r', dest='rep_policy', metavar='replacement',type=str
 				   , help='Replacement policy. Acceptable values: RR (round'\
 				   +' robin), RND (random), LRU (least recently used)')
 args = parser.parse_args()
-print(args)
-# if len(sys.argv) < 11:
-#     print("Not enough arguments")
-#     sys.exit(1)
+if not (1 <= args.cache_size <= 8192):
+	parser.error('-s cache size is out of range.  int between 1 and 8192') 
 
-# if len(sys.argv) > 11:
-#     print("Too many arguments")
-#     sys.exit(1)
+if not (1 <= args.block_size <= 64):
+	parser.error('-b block size is out of range. Select int between 1 and 64') 
+
+print(args)
+
+trace_file = args.trace_file
+cache_size = args.cache_size
+block_size = args.block_size
+associativity = args.associativity
+rep_policy = args.rep_policy
 
 
         
