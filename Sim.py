@@ -1,5 +1,6 @@
 import sys
 import os
+import math
 from os import path
 import argparse
 
@@ -50,11 +51,91 @@ rep_policy = args.rep_policy
 group_number = 14
 
 
-# File validation and parse
+# File validation
 if not path.exists(trace_file):
         print("File '", trace_file, "' doen't exist")
         exit()
 
+
+
+
+#
+# Creating Cache
+#
+# python3 Sim.py -f TestTrace.trc -s 1024 -b 16 -a 2 -r RR
+#
+# Based on this implementation of cache, there will be a dictionary of dictionaries
+# 
+# Of associativity n:
+# 
+# cache = { 0 : cache_set, 1 : cache_set, ... , n-1 : cache_set}
+# 
+# For example, cache size is 1024KB, 
+# 2-way set associative. Block size: 16
+# There would be 2^15 indexes (rows) per cache_set * 2 (associativity)
+# 
+# cache = { 0 : cache_set, 1 : cache_set }
+#
+#               cache:
+# 
+# 0 : cache_set: , 1 :  cache_set:
+#      [  0   ]          [  0   ]
+#      [  1   ]          [  1   ]
+#      [  .   ]          [  .   ]
+#      [  .   ]          [  .   ]
+#      [  .   ]          [  .   ]
+#      [ 2^15 ]          [ 2^15 ]
+
+cache = {} #empty cache set
+cache_set = {} #empty cache for indexes
+x = 0      # counter
+
+number_of_indexes = (cache_size * 1000 ) / (block_size * associativity) # of indexes with associativity
+
+block_offset_bits = int(math.log(block_size, 2)) # get the offset bits
+index_bits = int(math.log(number_of_indexes, 2))+1  # get the index bits
+tag_bits = 32 - block_offset_bits - index_bits 
+
+# I believe these calculations are correct 
+print("Temporary Calculations")
+print("Number of indexes with associativity " + str(int(number_of_indexes)) + " 2^" + str(index_bits))
+print(str(block_offset_bits + index_bits + tag_bits) + " bits total" )
+print(str(block_offset_bits) + " bit offset")
+print(str(index_bits) + " bit index")
+print(str(tag_bits) + " bit tag")
+
+
+#This creates the cache using index size with associativity
+while x < number_of_indexes:
+        num = hex(x) 
+        cache_set[num] =  "00000000" # Example entry will be { 0x7cff : "00000000" }
+        x += 1
+
+# Uncomment print(cache_set) to see all of the 
+# indexes in 1/n section of the cache
+# This does print unordered
+# print(cache_set)
+
+
+#this the creates x (associativity) number for all the memory
+x = 0
+while x < associativity:
+        cache.update({x : cache_set}) # adds entry into dictionary
+        x+=1
+
+# uncomment print(cache) to see entire empty cache
+# print (cache) 
+
+
+
+
+
+
+
+
+
+
+#parsing file
 with open(trace_file) as f:
         count = 0 # to complete one block of EIP and dstM
         length = 0;         #bytes read
@@ -68,7 +149,6 @@ with open(trace_file) as f:
                 length = 0;         #bytes read
                 if line[0] == 'E':
                         line = line.rstrip('\n')
-                        #print(line)
                         br = int(line[5 : 7], 16)
                         hex_value1 = line[10 : 18]
                         #start line 19 for codes
@@ -79,17 +159,11 @@ with open(trace_file) as f:
                                         break
                                 else:
                                         length = length + 1
-                        #print(line[19 : length])
-                        #
-                        #Need to finish the length because it changes
-                        #
                         count += 1
-                        
 
                 if line[0] == 'd':
                         
                         line = line.rstrip('\n')
-                        #print(line)
 
                         hex_write = line[6 : 14]
                         if hex_write != '00000000':
@@ -117,12 +191,8 @@ with open(trace_file) as f:
                         if datarw == 3:
                                 return_statement = return_statement + ". Data write at 0x" + hex_write + ", length = 4 bytes, data read at 0x" + hex_read + ", length = 4 bytes."
                         count = 0
-                        print(return_statement + '\n')
+                        #print(return_statement + '\n') 
                         return_statement = " "
-                        #get rid of to load rest of the file        
-                        
-                        
-
 
 
 f.close()
@@ -306,5 +376,3 @@ f.close()
 
 # if __name__ == '__main__':
 #         main()
-
-
