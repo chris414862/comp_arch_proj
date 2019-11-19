@@ -41,25 +41,25 @@ def parse_args():
         return args
 
 #### Script style implementation
-args = parse_args()       
-print(args)
+# args = parse_args()       
+# print(args)
 
-trace_file = args.trace_file
-cache_size = args.cache_size
-block_size = args.block_size
-associativity = args.associativity
-rep_policy = args.rep_policy
-group_number = 14
-total_blocks = cache_size / block_size
-number_of_indexes = (cache_size * 1000 ) / (block_size * associativity) # of indexes with associativity
-block_offset_bits = int(math.log(block_size, 2)) # get the offset bits
-index_bits = int(math.log(number_of_indexes, 2))+1  # get the index bits
-tag_bits = 32 - block_offset_bits - index_bits  #tag bits 
+# trace_file = args.trace_file
+# cache_size = args.cache_size
+# block_size = args.block_size
+# associativity = args.associativity
+# rep_policy = args.rep_policy
+# group_number = 14
+# total_blocks = cache_size / block_size
+# number_of_indexes = (cache_size * 1000 ) / (block_size * associativity) # of indexes with associativity
+# block_offset_bits = int(math.log(block_size, 2)) # get the offset bits
+# index_bits = int(math.log(number_of_indexes, 2))+1  # get the index bits
+# tag_bits = 32 - block_offset_bits - index_bits  #tag bits 
 
-# File validation
-if not path.exists(trace_file):
-        print("File '", trace_file, "' doen't exist")
-        exit()
+# # File validation
+# if not path.exists(trace_file):
+#         print("File '", trace_file, "' doen't exist")
+#         exit()
 
 
 #
@@ -72,73 +72,72 @@ if not path.exists(trace_file):
 #empty cache set
 cache = {}
 
-#This creates the cache using index size with associativity
-cache = {i : {a : (0, None) for a in range(int(associativity))} for i in range(int(number_of_indexes))}
+
 
 #print (cache) 
 
 
-#parsing file
-with open(trace_file) as f:
-        count = 0 # to complete one block of EIP and dstM
-        length = 0;         #bytes read
-        br = 0;             #bytes to read
-        hex_value1 = ''
-        hex_write = ''
-        hex_read = ''
-        return_statement = " "
-        for line in f:
-                datarw = 0 # 1 for read, 2 for write, 3 for read/write
-                length = 0;         #bytes read
-                if line[0] == 'E':
-                        line = line.rstrip('\n')
-                        br = int(line[5 : 7], 16)
-                        hex_value1 = line[10 : 18]
-                        #start line 19 for codes
-                        for x in line:
-                                # *** CC: I added a check to make sure the string isn't
-                                # accessed out of range
-                                if x == ' ' and len(line) > length + 1 and line[length + 1] == ' ':
-                                        break
-                                else:
-                                        length = length + 1
-                        count += 1
+# #parsing file
+# with open(trace_file) as f:
+#         count = 0 # to complete one block of EIP and dstM
+#         length = 0;         #bytes read
+#         br = 0;             #bytes to read
+#         hex_value1 = ''
+#         hex_write = ''
+#         hex_read = ''
+#         return_statement = " "
+#         for line in f:
+#                 datarw = 0 # 1 for read, 2 for write, 3 for read/write
+#                 length = 0;         #bytes read
+#                 if line[0] == 'E':
+#                         line = line.rstrip('\n')
+#                         br = int(line[5 : 7], 16)
+#                         hex_value1 = line[10 : 18]
+#                         #start line 19 for codes
+#                         for x in line:
+#                                 # *** CC: I added a check to make sure the string isn't
+#                                 # accessed out of range
+#                                 if x == ' ' and len(line) > length + 1 and line[length + 1] == ' ':
+#                                         break
+#                                 else:
+#                                         length = length + 1
+#                         count += 1
 
-                if line[0] == 'd':
+#                 if line[0] == 'd':
                         
-                        line = line.rstrip('\n')
+#                         line = line.rstrip('\n')
 
-                        hex_write = line[6 : 14]
-                        if hex_write != '00000000':
-                                if datarw == 2:
-                                        datarw = 3
-                                if datarw == 0:
-                                        datarw = 1
+#                         hex_write = line[6 : 14]
+#                         if hex_write != '00000000':
+#                                 if datarw == 2:
+#                                         datarw = 3
+#                                 if datarw == 0:
+#                                         datarw = 1
 
-                        hex_read = line[33 : 41]
-                        if hex_read != '00000000':
-                                if datarw == 1:
-                                        datarw = 3
-                                if datarw == 0:
-                                        datarw = 2
+#                         hex_read = line[33 : 41]
+#                         if hex_read != '00000000':
+#                                 if datarw == 1:
+#                                         datarw = 3
+#                                 if datarw == 0:
+#                                         datarw = 2
                         
-                        count += 1
-                if count == 2:
-                        return_statement = "Address: 0x" + hex_value1 + ", length = " + str(br)
-                        if datarw == 0:
-                                return_statement = return_statement + ". No data writes/reads occurred."
-                        if datarw == 2:
-                                return_statement = return_statement + ". Data read at 0x" + hex_read + ", length = 4 bytes."
-                        if datarw == 3:
-                                return_statement = return_statement + ". Data write at 0x" + hex_write + ", length = 4 bytes."
-                        if datarw == 3:
-                                return_statement = return_statement + ". Data write at 0x" + hex_write + ", length = 4 bytes, data read at 0x" + hex_read + ", length = 4 bytes."
-                        count = 0
-                        #print(return_statement + '\n') 
-                        return_statement = " "
+#                         count += 1
+#                 if count == 2:
+#                         return_statement = "Address: 0x" + hex_value1 + ", length = " + str(br)
+#                         if datarw == 0:
+#                                 return_statement = return_statement + ". No data writes/reads occurred."
+#                         if datarw == 2:
+#                                 return_statement = return_statement + ". Data read at 0x" + hex_read + ", length = 4 bytes."
+#                         if datarw == 3:
+#                                 return_statement = return_statement + ". Data write at 0x" + hex_write + ", length = 4 bytes."
+#                         if datarw == 3:
+#                                 return_statement = return_statement + ". Data write at 0x" + hex_write + ", length = 4 bytes, data read at 0x" + hex_read + ", length = 4 bytes."
+#                         count = 0
+#                         #print(return_statement + '\n') 
+#                         return_statement = " "
 
 
-f.close()
+# f.close()
 
 #### Object Oriented Implementation \w some modularization ####
 class mem_access_request():
@@ -226,7 +225,7 @@ class full_instruction():
 class cache():
     def __init__ (self, total_blocks=None, number_of_indexes=None, block_offset=None, index_bits=None, tag_bits=None):
         self.total_blocks = parsed_args.cache_size / parsed_args.cache_size
-        self.number_of_indexes = (cache_size * 1000 ) / (block_size * associativity) # of indexes with associativity
+        self.number_of_indexes = (cache_size * 1024 ) / (block_size * associativity) # of indexes with associativity
         self.block_offset_bits = int(math.log(block_size, 2)) # get the offset bits
         self.index_bits = int(math.log(number_of_indexes, 2))+1  # get the index bits
         self.tag_bits = 32 - block_offset_bits - index_bits  #tag bits
@@ -317,6 +316,10 @@ def main():
 
         print_cache_info()
         full_instructions = read_instructions(args.trace_file)
+        cache = create_cache(args)
+
+        #This creates the cache using index size with associativity
+		cache = {i : {a : (0, None) for a in range(int(associativity))} for i in range(int(number_of_indexes))}
 
         print_results()
         print_samples(full_instructions, num_print=20, debug=args.debug)    
