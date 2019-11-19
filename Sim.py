@@ -4,6 +4,7 @@ import os
 import math
 from os import path
 import argparse
+import logging
 
 
 # -f <trace file name>     [ name of text file with the trace ]
@@ -11,6 +12,19 @@ import argparse
 # -b <block size>          [ 4 bytes to 64 bytes ]
 # -a <associativity>       [ 1, 2, 4, 8, 16 ]
 # -r <replacement policy>  [RR or RND or LRU for bonus points]
+DEBUG=False
+
+def main():
+		args = parse_args()
+		print_header(sys.argv, args)
+		cache = Cache(cache_size=args.cache_size, block_size=args.block_size, associativity=args.associativity
+					 , rep_policy=args.rep_policy)
+		cache.display()
+		full_instructions = read_instructions(args.trace_file)
+		#hit_rate, miss_rate, cpi = cache_simulator(cache, full_instructions)
+		print_results()
+		if args.debug:
+			print_samples(full_instructions, num_print=20)   
 
 def parse_args():
         parser = argparse.ArgumentParser()
@@ -37,107 +51,14 @@ def parse_args():
 
         if not (4 <= args.block_size <= 64):
         	parser.error('-b block size is out of range. Select int between 4 and 64') 
+        if args.debug:
+        	logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+        	DEBUG = True
+        else:
+        	logging.basicConfig(filename=sys.argv[0]+'.log', format='%(levelname)s: %(message)s')
 
         return args
 
-#### Script style implementation
-# args = parse_args()       
-# print(args)
-
-# trace_file = args.trace_file
-# cache_size = args.cache_size
-# block_size = args.block_size
-# associativity = args.associativity
-# rep_policy = args.rep_policy
-# group_number = 14
-# total_blocks = cache_size / block_size
-# number_of_indexes = (cache_size * 1000 ) / (block_size * associativity) # of indexes with associativity
-# block_offset_bits = int(math.log(block_size, 2)) # get the offset bits
-# index_bits = int(math.log(number_of_indexes, 2))+1  # get the index bits
-# tag_bits = 32 - block_offset_bits - index_bits  #tag bits 
-
-# # File validation
-# if not path.exists(trace_file):
-#         print("File '", trace_file, "' doen't exist")
-#         exit()
-
-
-#
-# Creating Cache
-#
-# python3 Sim.py -f TestTrace.trc -s 1024 -b 16 -a 2 -r RR
-#
-# Based on this implementation of cache, there will be a dictionary of dictionaries
-
-#empty cache set
-cache = {}
-
-
-
-#print (cache) 
-
-
-# #parsing file
-# with open(trace_file) as f:
-#         count = 0 # to complete one block of EIP and dstM
-#         length = 0;         #bytes read
-#         br = 0;             #bytes to read
-#         hex_value1 = ''
-#         hex_write = ''
-#         hex_read = ''
-#         return_statement = " "
-#         for line in f:
-#                 datarw = 0 # 1 for read, 2 for write, 3 for read/write
-#                 length = 0;         #bytes read
-#                 if line[0] == 'E':
-#                         line = line.rstrip('\n')
-#                         br = int(line[5 : 7], 16)
-#                         hex_value1 = line[10 : 18]
-#                         #start line 19 for codes
-#                         for x in line:
-#                                 # *** CC: I added a check to make sure the string isn't
-#                                 # accessed out of range
-#                                 if x == ' ' and len(line) > length + 1 and line[length + 1] == ' ':
-#                                         break
-#                                 else:
-#                                         length = length + 1
-#                         count += 1
-
-#                 if line[0] == 'd':
-                        
-#                         line = line.rstrip('\n')
-
-#                         hex_write = line[6 : 14]
-#                         if hex_write != '00000000':
-#                                 if datarw == 2:
-#                                         datarw = 3
-#                                 if datarw == 0:
-#                                         datarw = 1
-
-#                         hex_read = line[33 : 41]
-#                         if hex_read != '00000000':
-#                                 if datarw == 1:
-#                                         datarw = 3
-#                                 if datarw == 0:
-#                                         datarw = 2
-                        
-#                         count += 1
-#                 if count == 2:
-#                         return_statement = "Address: 0x" + hex_value1 + ", length = " + str(br)
-#                         if datarw == 0:
-#                                 return_statement = return_statement + ". No data writes/reads occurred."
-#                         if datarw == 2:
-#                                 return_statement = return_statement + ". Data read at 0x" + hex_read + ", length = 4 bytes."
-#                         if datarw == 3:
-#                                 return_statement = return_statement + ". Data write at 0x" + hex_write + ", length = 4 bytes."
-#                         if datarw == 3:
-#                                 return_statement = return_statement + ". Data write at 0x" + hex_write + ", length = 4 bytes, data read at 0x" + hex_read + ", length = 4 bytes."
-#                         count = 0
-#                         #print(return_statement + '\n') 
-#                         return_statement = " "
-
-
-# f.close()
 
 #### Object Oriented Implementation \w some modularization ####
 class mem_access_request():
@@ -177,152 +98,164 @@ class mem_access_request():
 
 
 class full_instruction():
-    def __init__(self,instruction=None, read=None, write=None, instruct_line=None
+	def __init__(self,instruction=None, read=None, write=None, instruct_line=None
                     , rw_line=None):
-        self.instruction = instruction
-        self.read = read
-        self.write = write
-        self.instruct_line = instruct_line
-        self.rw_line=rw_line
+		self.instruction = instruction
+		self.read = read
+		self.write = write
+		self.instruct_line = instruct_line
+		self.rw_line=rw_line
 
-    def display(self, debug=False, num_print=3):
-        instruction_count = 1
-        if debug:
-            print('***instruction request:')
+	def display(self, num_print=3):
+		instruction_count = 1
 
-        print(self.instruction.to_string())
+		logging.debug('***instruction request:')
+		print(self.instruction.to_string())
+		logging.debug('from line: '+str(self.instruct_line))
 
-        if debug:
-            print('from line:', self.instruct_line)
-        if instruction_count == num_print:
-            return instruction_count
+		# Used to make sure only 20 total accesses are printed
+		if instruction_count == num_print:
+			return instruction_count
 
-        if debug:
-            print('write request:')
-        if self.write is not None:
-            instruction_count += 1
-            print(self.write.to_string())
+		logging.debug('write request:')
+		if self.write is not None:
+			instruction_count += 1
+			print(self.write.to_string())
+		else:
+			logging.debug(self.write)
+		logging.debug('from line: '+str(self.rw_line))
 
-        if debug:
-            if self.write is None:
-                print(self.write)
-            print('from line:', self.rw_line)
-        if instruction_count == num_print:
-            return instruction_count
+		# Used to make sure only 20 total accesses are printed
+		if instruction_count == num_print:
+			return instruction_count
 
-        if debug:
-            print('read request:')
-        if self.read is not None:
-            instruction_count += 1
-            print(self.read.to_string())
-        if debug:
-            if self.read is None:
-                print(self.read)
-            print('from line:', self.rw_line)       
-                
-        return instruction_count
+		logging.debug('read request:')
+		if self.read is not None:
+			instruction_count += 1
+			print(self.read.to_string())
+		else:
+			logging.debug(self.read)
+		logging.debug('from line: '+str(self.rw_line))       
 
-class cache():
-    def __init__ (self, total_blocks=None, number_of_indexes=None, block_offset=None, index_bits=None, tag_bits=None):
-        self.total_blocks = parsed_args.cache_size / parsed_args.cache_size
-        self.number_of_indexes = (cache_size * 1024 ) / (block_size * associativity) # of indexes with associativity
-        self.block_offset_bits = int(math.log(block_size, 2)) # get the offset bits
-        self.index_bits = int(math.log(number_of_indexes, 2))+1  # get the index bits
-        self.tag_bits = 32 - block_offset_bits - index_bits  #tag bits
+		return instruction_count
+
+
     
 def print_header(cmd_args, parsed_args):
-        print('\nCmd Line:', ' '.join(cmd_args))
-        print('Trace File:', parsed_args.trace_file)
-        print('Cache Size:', parsed_args.cache_size)
-        print('Block Size:', parsed_args.block_size)
-        print('Associativity:', parsed_args.associativity)
-        print('R-Policy:', parsed_args.rep_policy)
+    print('\nCmd Line:', ' '.join(cmd_args))
+    print('Trace File:', parsed_args.trace_file)
 
-def print_cache_info():
-        #TODO: fill out actual values after implementing calculations
-        print('----- Calculated Values -----')
-        print('Total #Blocks:', int(total_blocks)  )
-        print('Tag Size:', tag_bits)
-        print('Index Size:', int(number_of_indexes))
-        print('Overhead Memory Size:')
-        print('Implementation Memory Size:')
+
+
 
 def print_results():
-        #TODO: fill out results once cache is implemented
-        print('----- Results -----')
-        print('Cache Hit Rate:')
-        print('Cache Miss Rate:')
-        print('CPI:', '\n')
+    #TODO: fill out results once cache is implemented
+    print('----- Results -----')
+    print('Cache Hit Rate:')
+    print('Cache Miss Rate:')
+    print('CPI:', '\n')
 
 
-def print_samples(instructions, num_print=20, debug=False):
-        count = 0
-        for instruct in instructions:
-                count+= instruct.display(num_print=(num_print-count), debug=debug)
-                if count >= num_print:
-                        if debug:
-                                print('num_print reached:', num_print)
-                        break
+def print_samples(instructions, num_print=20):
+    count = 0
+    for instruct in instructions:
+            count+= instruct.display(num_print=(num_print-count))
+            if count >= num_print:
+                    logging.debug('num_print reached: '+str(num_print))
+                    break
 
 def read_instructions(trace_file):
-        if not path.exists(trace_file):
-                print("File '", trace_file, "' doen't exist")
-                exit()
-        with open(trace_file) as f:
-                instruction_list = []
-                next_full_instruct = None
-                for line in f:
-                        if line[0] == 'E':
-                                length = line[5:7]
-                                address = line[10 : 18]
-                                access_type = 'i'
-                                instruction = mem_access_request(address=address
-                                                                , access_type=access_type
-                                                                , length=length)
-                                next_full_instruct = full_instruction(instruction=instruction)
-                                next_full_instruct.instruct_line = line
-                        if line[0] == 'd':
-                                if next_full_instruct == None:
-                                        print('Logic error: processed read/write before '
-                                            +'instruction line')
-                                        raise
+    if not path.exists(trace_file):
+            print("File '", trace_file, "' doen't exist")
+            exit()
+    with open(trace_file) as f:
+            instruction_list = []
+            next_full_instruct = None
+            for line in f:
+                    if line[0] == 'E':
+                            length = line[5:7]
+                            address = line[10 : 18]
+                            access_type = 'i'
+                            instruction = mem_access_request(address=address
+                                                            , access_type=access_type
+                                                            , length=length)
+                            next_full_instruct = full_instruction(instruction=instruction)
+                            next_full_instruct.instruct_line = line
+                    if line[0] == 'd':
+                            if next_full_instruct == None:
+                                    print('Logic error: processed read/write before '
+                                        +'instruction line')
+                                    raise
 
-                                write_address = line[6:14]
-                                write = None
-                                if write_address != '00000000':
-                                        write = mem_access_request(address=write_address
-                                                                    , access_type='w')
-                                
-                                read_address = line[33:41]
-                                read = None
-                                if read_address != '00000000':
-                                        read = mem_access_request(address=read_address
-                                                                , access_type='r')
+                            write_address = line[6:14]
+                            write = None
+                            if write_address != '00000000':
+                                    write = mem_access_request(address=write_address
+                                                                , access_type='w')
+                            
+                            read_address = line[33:41]
+                            read = None
+                            if read_address != '00000000':
+                                    read = mem_access_request(address=read_address
+                                                            , access_type='r')
 
-                                next_full_instruct.write = write
-                                next_full_instruct.read = read
-                                next_full_instruct.rw_line = line
-                                if next_full_instruct.instruction.length > 0:
-                                        instruction_list.append(next_full_instruct)
+                            next_full_instruct.write = write
+                            next_full_instruct.read = read
+                            next_full_instruct.rw_line = line
+                            if next_full_instruct.instruction.length > 0:
+                                    instruction_list.append(next_full_instruct)
 
-                                # reset for next set of instructions
-                                next_full_instruct = None
-        return instruction_list
+                            # reset for next set of instructions
+                            next_full_instruct = None
+    return instruction_list
 
 
-def main():
-        args = parse_args()
-        print_header(sys.argv, args)
+class Block():
+	def __init__(self, tag=None, valid=0):
+		self.tag=tag
+		self.valid=valid
 
-        print_cache_info()
-        full_instructions = read_instructions(args.trace_file)
-        cache = create_cache(args)
 
-        #This creates the cache using index size with associativity
-		cache = {i : {a : (0, None) for a in range(int(associativity))} for i in range(int(number_of_indexes))}
+class CacheRow():
+	def __init__(self, associativity, index ):
+		self.associativity = associativity
+		self.index = index
+		self.cols = [Block() for a in range(associativity)]
 
-        print_results()
-        print_samples(full_instructions, num_print=20, debug=args.debug)    
+class Cache():
+	def __init__ (self, cache_size=0, block_size=0, associativity=0, rep_policy=None):
+		self.cache_size = cache_size
+		self.block_size = block_size
+		self.associativity = associativity
+		self.rep_policy = rep_policy
+		self.total_blocks = self.cache_size // self.block_size
+		if self.cache_size % self.block_size != 0:
+			self.cache_size = self.total_blocks * self.block_size
+			print('WARNING: Cache size not divisible by block size. Reducing cache size to '+str(self.cache_size))
+		self.number_of_indeces = cache_size  // (block_size * associativity) * 1024 # of indexes with associativity
+		self.block_offset_bits = int(math.log(block_size, 2)) # get the offset bits
+		self.index_bits = int(math.log(self.number_of_indeces, 2))  # get the index bits
+		self.tag_bits = 32 - self.block_offset_bits - self.index_bits  #tag bits
+		self.overhead = self.total_blocks*(1 + self.tag_bits)//8
+		self.implementation = self.overhead +self.cache_size
+		self.c = [CacheRow(self.associativity, i) for i in range(self.number_of_indeces)]
+
+
+	def display(self):
+		#TODO: fill out actual values after implementing calculations
+		print('Cache Size:', self.cache_size)
+		print('Block Size:', self.block_size)
+		print('Associativity:', self.associativity)
+		print('R-Policy:', self.rep_policy)
+		print('----- Calculated Values -----')
+		print('Total #Blocks:', int(self.total_blocks)  )
+		print('Tag Size:', self.tag_bits)
+		print('Index Size:', int(self.index_bits))
+		print('Overhead Memory Size:', self.overhead)
+		print('Implementation Memory Size:', self.implementation)
+
+
+ 
 
 
 if __name__ == '__main__':
