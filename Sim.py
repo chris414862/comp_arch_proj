@@ -28,39 +28,48 @@ def main():
 				 , rep_policy=args.rep_policy)
 	cache.display()
 	full_instructions = read_instructions(args.trace_file)
-	hit_rate, miss_rate, cpi = cache_simulator(cache, full_instructions)
-	print_results(hit_rate, miss_rate, cpi)
+	hit_rate, miss_rate, cpi, tot_hits, tot_misses,tot_accesses = cache_simulator(cache, full_instructions)
+	print_results(hit_rate, miss_rate, cpi, tot_hits, tot_misses, tot_accesses)
 	if args.debug:
 		print_samples(full_instructions, num_print=20)   
 
 
 def cache_simulator(cache, full_instructions):
 	num_instructions = len(full_instructions)
+	tot_mem_accesses = 0
 	tot_hits = 0
 	tot_misses = 0
 	tot_cycles = 0
 	counts = Counter()
-	for i, full_instruction in enumerate(full_instructions):
+	for g, full_instruction in enumerate(full_instructions):
 		num_remaining_requests = full_instruction.get_num_mem_requests()
+		
+		counts[num_remaining_requests] +=1
+		#print(num_remaining_requests)
 		while num_remaining_requests > 0:
 			next_request, num_remaining_requests = full_instruction.next_mem_request()
 			# print('curr request:', next_request.to_string())
 			# print('num_remaining:', num_remaining_requests)
-			hits, misses, cycles = process_request(next_request, cache,i)
-			tot_hits += hits
-			tot_misses += misses
+			hits, misses, cycles = process_request(next_request, cache,g)
+			hits = hits #if hits <= 1 else 1
+			misses = misses #if misses <= 1 else 1
+			tot_hits += hits #if hits <= 1 else 1
+			tot_misses += misses #if misses <= 1 else 1
 			tot_cycles += cycles
-			counts[cycles] +=1 
+			tot_mem_accesses += hits +misses
+			#counts[cycles] +=1 
 			#print(hits, misses, cycles)
-		# if i > 10:
+		# if g >= 1000:
+		# 	num_instructions = g
+		# 	break
 		# 	print(tot_hits, tot_misses, tot_cycles)
 		# 	sys.exit()
-	# print(counts)
+	print(counts)
 	# s = sum([int(val)*int(key) for key,val in counts.items()])
 	# [print(str(key)+': '+str(int(val)*int(key)/s)) for key,val in counts.items()]
 	# print(num_instructions)
 	denom = tot_hits + tot_misses
-	return tot_hits/denom, tot_misses/denom, tot_cycles/num_instructions
+	return tot_hits/denom, tot_misses/denom, tot_cycles/num_instructions, tot_hits, tot_misses, tot_mem_accesses
 
 def process_request(mem_access_request, cache, n):
 	global GLOBAL_CLOCK
@@ -70,21 +79,24 @@ def process_request(mem_access_request, cache, n):
 	address = mem_access_request.address
 	hits = 0
 	misses = 0
-	t = 0
-	# print('\nxxxxxxx start address:', address)
+	#t = 0
+	# print('\nxxxxxxx start address:%x'%address)
+	# print('xxxxxxx start address:', bin(address))
 	while bytes_to_read > 0:
-		# print('xxxxxxx new address:', address)
+		# print('xxxxxxx new address:%x'%address)
+		# print('xxxxxxx new address:', bin(address))
 		# print('bytes to read:', bytes_to_read)
 		GLOBAL_CLOCK = GLOBAL_CLOCK + 1
 		# print('global clock:', GLOBAL_CLOCK)
-		bytes_read= cache.check_cache(address, bytes_to_read)
+		bytes_read= cache.read_from_cache(address, bytes_to_read)
 		
-		# print('bytes read from cache:', bytes_read)
+		
 		if bytes_read <= 0: # miss
 			# print('MISS!', n)
-			bytes_read = BUS_SIZE
+			cache.replace_block(address)
+			bytes_read= cache.read_from_cache(address, bytes_to_read)
 			misses += 1
-			cache.update(address)
+			
 			cycles += DEFAULT_MEM_ACCESS_CYCLES * math.ceil(cache.block_size/BUS_SIZE)+1
 			
 
@@ -92,6 +104,7 @@ def process_request(mem_access_request, cache, n):
 			# print('HIT!')
 			cycles += 1
 			hits += 1
+		# print('bytes read from cache:', bytes_read)
 		# print('cycles:', cycles)
 		bytes_to_read -= bytes_read
 		address += bytes_read
@@ -141,22 +154,25 @@ class CacheRow():
 		return False
 
 	def replace(self, idx, tag):
-		if type(idx) == int:
-			x = self.cols.pop(idx)
+		if type(idx) != int:
+			idx = int(idx)
+		x = self.cols.pop(idx)
 			# print(tag, 'clock for evicted:', x.last_used, ' curr clock:', GLOBAL_CLOCK)
 
-			self.cols.insert(idx, Block(tag=tag, valid=1, col_index=idx))
+		self.cols.insert(idx, Block(tag=tag, valid=1, col_index=idx))
 
 class Cache():
 	def __init__ (self, cache_size=0, block_size=0, associativity=0, rep_policy=None):
 		self.cache_size = cache_size * 1024
+		#print('ssssss ', self.cache_size)
 		self.block_size = block_size
 		self.associativity = associativity
 		self.rep_policy = rep_policy
-		self.total_blocks = self.cache_size // self.block_size
+		
 		if not math.log2(self.cache_size).is_integer():
-			self.cache_size = 2**math.floor(math.log(self.cache_size))
-			logging.warning('Cache size is not a power of 2. Reducing cache size to '+str(self.cache_size))
+			self.cache_size = 2**math.floor(math.log(self.cache_size,2))
+			logging.warning('Cache size is not a power of 2. Reducing cache size to '+str(self.cache_size//1024)+'kb')
+		self.total_blocks = self.cache_size // self.block_size
 		self.number_of_indeces = math.ceil(self.cache_size  /(self.block_size * self.associativity))  # of indexes with associativity
 		self.block_offset_bits = math.ceil(math.log(block_size, 2)) # get the offset bits
 		self.index_bits = math.ceil(math.log(self.number_of_indeces, 2))  # get the index bits
@@ -166,11 +182,11 @@ class Cache():
 		self.c = [CacheRow(self.associativity, i) for i in range(self.number_of_indeces)]
 
 
-	def update(self, address):
+	def replace_block(self, address):
 		tag, idx, b_offset = self.get_address_pieces(address)
 		row = self.c[idx]
 		# print('idx:',idx)
-		row.contains_valid_tag(tag, p=True)
+		# row.contains_valid_tag(tag, p=True)
 		# print('next for rr:', row.next_for_round_robin)
 		if self.rep_policy == 'RND':
 			rem_idx = random.randint(0, row.associativity-1)
@@ -186,32 +202,34 @@ class Cache():
 		# print('rem_idx:', rem_idx)
 		row.replace(rem_idx, tag)
 
-	def check_cache(self, address, bytes_to_read):
-		tag, idx, b_offset = self.get_address_pieces(address)
+		#return BUS_SIZE if BUS_SIZE < (self.block_size - b_offset) else (self.block_size - b_offset)
 
+	def read_from_cache(self, address, bytes_to_read):
+		tag, idx, b_offset = self.get_address_pieces(address)
+		# print('!!address:', bin(address))
+		# print(address)
+		# print('!!b_offset:', bin(b_offset))
+		# print(b_offset)
+		# print('!!tag:', bin(tag))
+		# print(tag)
+		# print('!!idx:', bin(idx))
+		# print(idx)
+		# print('!!bob:',self.block_offset_bits)
+		# print('!!idxbits:',self.index_bits)
+		# print(len(self.c))
 		row = self.c[idx]
 		if row.contains_valid_tag(tag):
 			spill_over = (b_offset +BUS_SIZE) > self.block_size and (b_offset +bytes_to_read) > self.block_size 
 			if spill_over:
-				bytes_read = BUS_SIZE + b_offset - self.block_size
+				bytes_read = self.block_size - b_offset 
 				#print('!!SPILL OVER!!bytes read:', bytes_read)
 			else:
-				bytes_read = bytes_to_read if BUS_SIZE > bytes_to_read else BUS_SIZE
+				bytes_read = bytes_to_read if  bytes_to_read < BUS_SIZE else BUS_SIZE
 				#print('!!!!bytes read:', bytes_read)
 
 			return bytes_read 
 		else:
-			# print('address:', bin(address))
-			# print(address)
-			# print('b_offset:', bin(b_offset))
-			# print(b_offset)
-			# print('tag:', bin(tag))
-			# print(tag)
-			# print('idx:', bin(idx))
-			# print(idx)
-			# print('bob:',self.block_offset_bits)
-			# print('idxbits:',self.index_bits)
-			# print(len(self.c))
+
 			return 0
 
 
@@ -320,7 +338,8 @@ class full_instruction():
 		if i is not None:
 			self.curr_mem_request = self.mem_accesses[i]
 
-
+	def set_mem_accesses(self):
+		self.mem_accesses = [self.instruction, self.read, self.write]
 
 
 	def get_num_mem_requests(self):
@@ -372,12 +391,15 @@ def print_header(cmd_args, parsed_args):
 
 
 
-def print_results(hit_rate, miss_rate, cpi):
+def print_results(hit_rate, miss_rate, cpi, tot_hits, tot_misses, tot_accesses):
     #TODO: fill out results once cache is implemented
     print('----- Results -----')
     print('Cache Hit Rate: %.2f%%'%( hit_rate*100))
     print('Cache Miss Rate: %.2f%%'%(miss_rate*100))
     print('CPI: %.2f'%(cpi), '\n')
+    print('tot hits:', tot_hits)
+    print('tot misses:', tot_misses)
+    print('tot accesses:', tot_accesses)
 
 
 def print_samples(instructions, num_print=20):
@@ -426,6 +448,7 @@ def read_instructions(trace_file):
                             next_full_instruct.write = write
                             next_full_instruct.read = read
                             next_full_instruct.rw_line = line
+                            next_full_instruct.set_mem_accesses()
                             if next_full_instruct.instruction.length > 0:
                                     instruction_list.append(next_full_instruct)
 
