@@ -107,7 +107,6 @@ def process_request(mem_access_request, cache):
 			
 			# add the penalty for repopulating a block
 			cycles += DEFAULT_MEM_ACCESS_CYCLES * math.ceil(cache.block_size/BUS_SIZE)
-
 		
 
 		if DEBUG:
@@ -170,9 +169,10 @@ class Cache():
 		self.rep_policy = rep_policy
 		if not math.log2(self.cache_size).is_integer():
 			self.cache_size = 2**math.floor(math.log(self.cache_size,2))
-			logging.warning(f"Cache size is not a power of 2. Reducing cache size to {self.cache_size//1024} kb")
+			logging.warning("Cache size is not a power of 2. Reducing cache size to"+
+							f"{self.cache_size//1024} kb")
 		self.total_blocks = self.cache_size // self.block_size
-		self.number_of_indeces = math.ceil(self.cache_size  /(self.block_size * self.associativity))  # of indexes with associativity
+		self.number_of_indeces = math.ceil(self.cache_size  /(self.block_size * self.associativity))  
 		self.block_offset_bits = math.ceil(math.log(block_size, 2)) # get the offset bits
 		self.index_bits = math.ceil(math.log(self.number_of_indeces, 2))  # get the index bits
 		self.tag_bits = 32 - self.block_offset_bits - self.index_bits  #tag bits
@@ -379,7 +379,6 @@ class full_instruction():
 		       
 
 		return instruction_count
-
 
     
 def print_header(cmd_args, parsed_args):
