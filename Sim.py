@@ -8,14 +8,17 @@ import logging
 from ctypes import c_uint
 import random
 from collections import Counter
+import time
 
 
-DEFAULT_EXECUTION_CYCLES = 2
-DEFAULT_MEM_ACCESS_CYCLES = 3
+DEFAULT_EXECUTION_CYCLES = 2 # Number of cycle necessary to execute every instruction
+DEFAULT_MEM_ACCESS_CYCLES = 3 # Cycles to access main memory
 BUS_SIZE = 4
 GLOBAL_CLOCK = 0
 DEBUG = False
-DEBUG_ITERS = 10
+DEBUG_ITERS = 10 # Number of memory accesses to look at
+
+# Alignment variables
 ALIGN = 30
 H_ALIGN = 20
 H_SIZE = 50
@@ -38,11 +41,16 @@ def main():
 def cache_simulator(cache, full_instructions):
 	num_instructions = len(full_instructions)
 	tot_mem_accesses = tot_hits = tot_misses = tot_comp_misses = tot_cycles = 0
-	for i, full_instruction in enumerate(full_instructions):
 
+	# iterate instructions. each include the instruction memory access and the read and write accesses (if available)
+	for i, full_instruction in enumerate(full_instructions):
+		
+		# get the number of memory accesses for this instruction
 		num_remaining_requests = full_instruction.get_num_mem_requests()
 		while num_remaining_requests > 0:
 			next_request, num_remaining_requests = full_instruction.next_mem_request()
+
+			# check cache 
 			hits, misses, cycles, comp_misses = process_request(next_request, cache)
 			tot_hits += hits 
 			tot_misses += misses 
@@ -61,41 +69,53 @@ def cache_simulator(cache, full_instructions):
 def process_request(mem_access_request, cache):
 	global GLOBAL_CLOCK
 
+	# Cycle for just 'executing' the memory access (not sure why its added for data read/writes)
 	cycles = DEFAULT_EXECUTION_CYCLES
 	bytes_to_read = mem_access_request.length
 	address = mem_access_request.address
-	logging.debug(f"\n       {'start address:':{DEBUG_ALIGN}}{address:x}")
-	logging.debug(f"{'start address:':{DEBUG_ALIGN}}{address:b}")
+	if DEBUG:
+		logging.debug(f"\n       {'start address:':{DEBUG_ALIGN}}{address:x}")
+		logging.debug(f"{'start address:':{DEBUG_ALIGN}}{address:b}")
 
 	hits = misses = comp_misses = 0
 	while bytes_to_read > 0:
 		GLOBAL_CLOCK = GLOBAL_CLOCK + 1
-		logging.debug(f"{'new address:':{DEBUG_ALIGN}}{address:x}")
-		logging.debug(f"{'new address:':{DEBUG_ALIGN}}{address:b}")
-		logging.debug(f"{'bytes to read:':{DEBUG_ALIGN}}{bytes_to_read}")
-		logging.debug(f"{'global clock:':{DEBUG_ALIGN}}{GLOBAL_CLOCK}")
+		if DEBUG:
+			logging.debug(f"{'new address:':{DEBUG_ALIGN}}{address:x}")
+			logging.debug(f"{'new address:':{DEBUG_ALIGN}}{address:b}")
+			logging.debug(f"{'bytes to read:':{DEBUG_ALIGN}}{bytes_to_read}")
+			logging.debug(f"{'global clock:':{DEBUG_ALIGN}}{GLOBAL_CLOCK}")
 
-		bytes_read= cache.read_from_cache(address, bytes_to_read)
-		
-		if bytes_read <= 0: # miss
-			logging.debug(f"{'MISS!':{DEBUG_ALIGN}} ")
-
-			comp_misses = comp_misses +1 if bytes_read == -1 else comp_misses 
-			cache.replace_block(address)
-			bytes_read= cache.read_from_cache(address, bytes_to_read)
-			misses += 1
-			cycles += DEFAULT_MEM_ACCESS_CYCLES * math.ceil(cache.block_size/BUS_SIZE)+1
-
-		else: # hit 
-			logging.debug(f"{'HIT!':{DEBUG_ALIGN}}")
-
+		# check cache and try to read some bytes
+		bytes_read, hit_status= cache.read_from_cache(address, bytes_to_read)
+		if hit_status == 'hit':  
 			cycles += 1
 			hits += 1
+			if DEBUG:
+				ng.debug(f"{'HIT!':{DEBUG_ALIGN}}")
+		else: # miss
+			misses += 1
+			if DEBUG:
+				logging.debug(f"{'MISS!':{DEBUG_ALIGN}} ")
 
-		logging.debug(f"{'bytes read from cache:':{DEBUG_ALIGN}}{bytes_read}")
-		logging.debug(f"{'cycles:':{DEBUG_ALIGN}}{cycles}")
-		logging.debug(f"{'bytes remaining to read:':{DEBUG_ALIGN}}{bytes_to_read}")
+			# if bytes_read is -1 then it was a compulsory miss
+			if hit_status == 'compulsory':
+				comp_misses += 1
 
+			# run replacement policy after miss
+			cache.replace_block(address)
+			
+			# add the penalty for repopulating a block
+			cycles += DEFAULT_MEM_ACCESS_CYCLES * math.ceil(cache.block_size/BUS_SIZE)
+
+		
+
+		if DEBUG:
+			logging.debug(f"{'bytes read from cache:':{DEBUG_ALIGN}}{bytes_read}")
+			logging.debug(f"{'cycles:':{DEBUG_ALIGN}}{cycles}")
+			logging.debug(f"{'bytes remaining to read:':{DEBUG_ALIGN}}{bytes_to_read}")
+
+		# after an access all of the bytes in the block are brought back to the cpu
 		bytes_to_read -= bytes_read
 		address += bytes_read
 		
@@ -125,27 +145,21 @@ class CacheRow():
 	def __init__(self, associativity, col_index ):
 		self.associativity = associativity
 		self.col_index = col_index
-		self.cols = [Block(col_index=a) for a in range(associativity)]
+		self.cols = {idx:Block(col_index=idx) for idx in range(associativity)}
 		self.next_for_round_robin = 0
 
 
 	def is_full(self):
-		return [c for c in self.cols if not c.valid] == []
+		return [k for k in self.cols if not self.cols[k].valid] == []
 		
 
 	def contains_valid_tag(self, tag, p=False):
-		for block in self.cols:
-			if block.tag == tag and block.valid:
-				block.update_clock()
-				return True
-
-		return False
+		block = self.cols.get(tag, None)
+		return False if block == None or not block.valid else True
 
 	def replace(self, idx, tag):
-		if type(idx) != int:
-			idx = int(idx)
-		x = self.cols.pop(idx)
-		self.cols.insert(idx, Block(tag=tag, valid=1, col_index=idx))
+		self.cols.pop([k for k in self.cols if self.cols[k].col == idx][0])
+		self.cols[tag] = Block(tag=tag, valid=1, col_index=idx)
 
 
 class Cache():
@@ -164,12 +178,16 @@ class Cache():
 		self.tag_bits = 32 - self.block_offset_bits - self.index_bits  #tag bits
 		self.overhead = self.total_blocks*(1 + self.tag_bits)//8
 		self.implementation = self.overhead +self.cache_size
-		self.c = [CacheRow(self.associativity, i) for i in range(self.number_of_indeces)]
+		self.rows = [CacheRow(self.associativity, i) for i in range(self.number_of_indeces)]
 
 
 	def replace_block(self, address):
+		'''
+		This finds the index to replace depending on the replacement policy
+		'''
 		tag, idx, b_offset = self.get_address_pieces(address)
-		row = self.c[idx]
+
+		row = self.rows[idx]
 		if self.rep_policy == 'RND':
 			rem_idx = random.randint(0, row.associativity-1)
 
@@ -182,25 +200,27 @@ class Cache():
 			row.next_for_round_robin = (row.next_for_round_robin+1) % row.associativity
 
 		elif self.rep_policy == 'LRU':
-			rem_idx = row.cols.index(min(row.cols, key=lambda x: x.last_used))
+			rem_idx = min([row.cols[k] for k in row.cols], key=lambda x: x.last_used).col
 
 		row.replace(rem_idx, tag)
+	
 
 
 	def read_from_cache(self, address, bytes_to_read):
+		'''
+		This checks if an address is in the cache. Returns bytes read and the type of hit/miss
+		'''
 		tag, idx, b_offset = self.get_address_pieces(address)
-		row = self.c[idx]
+		row = self.rows[idx]
 		if row.contains_valid_tag(tag):
-			spill_over = (b_offset +BUS_SIZE) > self.block_size and (b_offset +bytes_to_read) > self.block_size 
-			if spill_over:
-				bytes_read = self.block_size - b_offset 
-
-			else:
-				bytes_read = bytes_to_read if  bytes_to_read < BUS_SIZE else BUS_SIZE
-
-			return bytes_read 
-		else:
-			return 0 if row.is_full() else -1 # encode whether miss was compulsory
+			hit_status = 'hit'
+		elif not row.is_full(): # compulsory miss
+			hit_status = 'compulsory'
+		else: # conflict miss
+			hit_status = 'conflict'
+			
+		bytes_read = self.block_size - b_offset
+		return bytes_read, hit_status 
 
 
 	def get_address_pieces(self, address):
@@ -428,6 +448,8 @@ def read_instructions(trace_file):
                             next_full_instruct.rw_line = line
                             next_full_instruct.set_mem_accesses()
                             if next_full_instruct.instruction.length >= 0:
+                                if next_full_instruct.instruction.length == 0:
+                                    next_full_instruct.instruction.length =1
                                 instruction_list.append(next_full_instruct)
 
                             # reset for next set of instructions
@@ -490,4 +512,7 @@ def parse_args():
 
 
 if __name__ == '__main__':
-        main()
+	start_time = time.time()
+	main()
+	time_str = f"{time.time() - start_time:.3f}"
+	print(f"\n{time_str+' Seconds':-^{H_SIZE}}")
