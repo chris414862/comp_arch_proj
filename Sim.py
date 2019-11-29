@@ -30,7 +30,9 @@ def main():
 	print_header(sys.argv, args)
 	cache = Cache(cache_size=args.cache_size, block_size=args.block_size, associativity=args.associativity
 				 , rep_policy=args.rep_policy)
+
 	cache.display()
+	cache.print_row(2014677760)
 	full_instructions = read_instructions(args.trace_file)
 	results = cache_simulator(cache, full_instructions)
 	print_results(*results)
@@ -144,7 +146,8 @@ class CacheRow():
 	def __init__(self, associativity, col_index ):
 		self.associativity = associativity
 		self.col_index = col_index
-		self.cols = {idx:Block(col_index=idx) for idx in range(associativity)}
+		# Initialize with negative tags so it doesn't conflict with real tags on first replacement 
+		self.cols = {-(idx+1):Block(col_index=idx) for idx in range(associativity)}
 		self.next_for_round_robin = 0
 
 
@@ -156,9 +159,11 @@ class CacheRow():
 		block = self.cols.get(tag, None)
 		return False if block == None or not block.valid else True
 
-	def replace(self, idx, tag):
+	def replace(self, idx, tag, address=0):
 		self.cols.pop([k for k in self.cols if self.cols[k].col == idx][0])
 		self.cols[tag] = Block(tag=tag, valid=1, col_index=idx)
+		if address == 176:
+			print('keys after:', self.cols.keys())
 
 
 class Cache():
@@ -179,6 +184,11 @@ class Cache():
 		self.overhead = self.total_blocks*(1 + self.tag_bits)//8
 		self.implementation = self.overhead +self.cache_size
 		self.rows = [CacheRow(self.associativity, i) for i in range(self.number_of_indeces)]
+
+
+	def print_row(self, address):
+		tag, idx, b_offset = self.get_address_pieces(address)
+		print(self.rows[idx].cols.keys())
 
 
 	def replace_block(self, address):
@@ -202,7 +212,7 @@ class Cache():
 		elif self.rep_policy == 'LRU':
 			rem_idx = min([row.cols[k] for k in row.cols], key=lambda x: x.last_used).col
 
-		row.replace(rem_idx, tag)
+		row.replace(rem_idx, tag, idx)
 	
 
 
