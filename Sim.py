@@ -202,7 +202,7 @@ class Cache():
 			rem_idx = random.randint(0, row.associativity-1)
 
 			# Make sure invalid blocks are filled first
-			while not row.is_full() and row.cols[rem_idx].valid:
+			while not row.is_full() and [val for key,val in row.cols.items() if val.col == rem_idx][0].valid:
 				rem_idx = random.randint(0, row.associativity-1)
 
 		elif self.rep_policy == 'RR':
