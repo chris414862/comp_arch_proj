@@ -32,7 +32,6 @@ def main():
 				 , rep_policy=args.rep_policy)
 
 	cache.display()
-	cache.print_row(2014677760)
 	full_instructions = read_instructions(args.trace_file)
 	results = cache_simulator(cache, full_instructions)
 	print_results(*results)
@@ -157,13 +156,14 @@ class CacheRow():
 
 	def contains_valid_tag(self, tag, p=False):
 		block = self.cols.get(tag, None)
-		return False if block == None or not block.valid else True
+		is_present = False if block == None or not block.valid else True
+		if is_present:
+			block.last_used = GLOBAL_CLOCK
+		return is_present
 
 	def replace(self, idx, tag, address=0):
 		self.cols.pop([k for k in self.cols if self.cols[k].col == idx][0])
 		self.cols[tag] = Block(tag=tag, valid=1, col_index=idx)
-		if address == 176:
-			print('keys after:', self.cols.keys())
 
 
 class Cache():
