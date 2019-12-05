@@ -5,7 +5,7 @@
 
 counter=1
 #compare associativity
-for filename in "Corruption1.trc" "TestTrace.trc" "TinyTrace.trc" "Trace1A.trc" "Trace2A.trc"; do
+for filename in "Corruption1.trc" "A-9_new1.5.pdf" "TestTrace.trc" "TinyTrace.trc" "Trace1A.trc" "Trace2A.trc"; do
 	echo "" > "output"$filename".txt"
 	replacement="RR"
 	echo "********************************************************************************************************************************************************* "$filename >> "output"$filename".txt"
